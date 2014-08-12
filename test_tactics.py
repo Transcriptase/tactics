@@ -54,8 +54,8 @@ class TestTurn(object):
         eq_(self.slow.ct, self.slow.speed)
         eq_(self.fast.ct, self.fast.speed)
 
-    def test_run(self):
-        self.b.run()
+    def test_advance(self):
+        self.b.advance()
         eq_(self.b.active_unit, self.fast)
         eq_(self.slow.ct, 20)
 
@@ -65,6 +65,62 @@ class TestMove(object):
         self.u = t.Unit()
         self.b = t.Battle(grid)
         self.u.join_battle(self.b, 1, 1)
+        self.u.move_speed = 1 #To keep options list small
         
     def test_legal(self):
         m = self.u.legal_moves()
+        eq_(len(m), 8)
+        
+    def test_make_move_menu(self):
+        m = self.u.make_move_menu()
+        eq_(len(m), 8)
+        self.u.print_menu(m, "Test move menu")
+        
+    def test_pull_move(self):
+        m = self.u.make_move_menu()
+        dest = self.u.pull_from_menu("1", m)
+        ok_(isinstance(dest, t.Node))
+        dest = self.u.pull_from_menu("13", m)
+        ok_(not dest)
+        dest = self.u.pull_from_menu("purple", m)
+        ok_(not dest)
+
+    def test_get_move(self):
+        responses = ["67",
+                     "walrus",
+                     "1"]
+        def f(responses):
+            '''
+            A generator that steps through the supplied responses
+            '''
+            for response in responses:
+                yield response
+                
+        def g(generator):
+            '''
+            Returns a function that returns the next element of responses
+            
+            When swapped in for the usual input function, simulates the user
+            entering the responses in sequence.
+            '''
+            return(lambda:next(generator))
+        
+        self.u.get_move_command(g(f(responses)))
+        
+        
+class TestVis(object):
+    def setup(self):
+        g = t.Grid(10, 10)
+        b = t.Battle(g)
+        
+        starts = [(0, 0),
+                  (9, 9)]
+        for start in starts:
+            new_unit = t.Unit()
+            new_unit.join_battle(b, start[0], start[1])
+            
+        self.v = t.Visualizer(b)
+        
+    def test_draw_grid(self):
+        self.v.draw()
+        
