@@ -107,6 +107,76 @@ class TestMove(object):
         
         self.u.get_move_command(g(f(responses)))
         
+class TestHealth(object):
+    def setup(self):
+        self.u = t.Unit()
+        
+    def test_die(self):
+        ok_(self.u.alive)
+        self.u.die()
+        eq_(self.u.current_hp, 0)
+        ok_(not self.u.alive)
+        
+    def test_hp_update(self):
+        self.u.current_hp = 100
+        self.u.update_hp(-20)
+        eq_(self.u.current_hp, 80)
+        self.u.update_hp(30)
+        eq_(self.u.current_hp, 100)
+        self.u.update_hp(-110)
+        eq_(self.u.current_hp, 0)
+        
+class TestMelee(object):
+    def setup(self):
+        self.u1 = t.Unit()
+        self.u2 = t.Unit()
+        
+    def dummy_hit_chk_true(self, target):
+        return True
+    
+    def dummy_hit_chk_false(self, target):
+        return False
+    
+    def dummy_dmg(self, target):
+        return 10
+        
+    def test_melee_atk(self):
+        self.u1.melee_atk(self.u2, self.dummy_hit_chk_false, self.dummy_dmg)
+        eq_(self.u2.current_hp, 100)
+        self.u1.melee_atk(self.u2, self.dummy_hit_chk_true, self.dummy_dmg)
+        eq_(self.u2.current_hp, 90)
+        
+
+class TestTeam(object):
+    def setup(self):
+        self.t = t.Team()
+        for i in xrange(5):
+            new_unit = t.Unit()
+            self.t.all_units.append(new_unit)
+    
+    def test_live_update(self):
+        self.t.live_update()
+        eq_(len(self.t.live_units), 5)
+        self.t.all_units[1].die()
+        self.t.live_update()
+        eq_(len(self.t.live_units), 4)
+        eq_(len(self.t.dead_units), 1)
+        
+    def test_defeat(self):
+        ok_(not self.t.is_defeated())
+        for unit in self.t.all_units:
+            unit.die()
+        ok_(self.t.is_defeated())
+        
+class TestMenu(object):
+    def setup(self):
+        options = ["Larry", "Moe", "Curly"]
+        title = "Stooges"
+        self.m = t.Menu(options, title)
+        
+    def test_string(self):
+        predicted_str = """Stooges:\n0: Larry\n1: Moe\n2: Curly\n"""
+        eq_(str(self.m), predicted_str) 
         
 class TestVis(object):
     def setup(self):

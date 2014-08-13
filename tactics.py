@@ -71,14 +71,21 @@ class Unit(object):
     def __init__(self):
         self.speed = 5
         self.ct = 0
-        self.move_speed = 3
+        self.move_speed = 2
         self.name = "A"
+        self.max_hp = 100
+        self.current_hp = 100
+        self.alive = True
+        
+        self.moved = False
+        self.acted = False
 
     def move(self, node):
         '''
         Sets the Unit's location to the specified Node
         '''
         self.location = node
+        self.moved = True
         
     def join_battle(self, battle, x, y):
         '''
@@ -144,15 +151,106 @@ class Unit(object):
                 finished = True
             else:
                 print("Please select a number from the menu.")
-
     
     def turn(self):
-        print "%s's Turn:" % self.name
-        self.get_move_command(self.prompt_for_input)
+        '''
+        Run when a unit becomes active. Steps through turn sequence, then resets CT
+        '''
+        #Reset moved and acted counters
+        self.moved = False
+        self.acted = False
+        
+        #Set up loop
+        finished = False
+        while not finished:
+            print "%s's Turn:" % self.name
+            self.get_move_command(self.prompt_for_input)
         self.ct = 0
+        
+    def update_hp(self, amount):
+        '''
+        Changes the Unit's HP by amount. Handles cases over max and under 0.
+        '''
+        new_hp = self.current_hp + amount
+        if new_hp <= 0:
+            self.die()
+        elif new_hp >= self.max_hp:
+            self.current_hp = self.max_hp
+        else:
+            self.current_hp = new_hp
+
+    def die(self):
+        '''
+        Kills a Unit
+        '''
+        self.current_hp = 0
+        self.alive = False
+
+    def melee_atk(self, target, hit_func, dmg_func):
+        '''
+        Perform a melee attack against target.
+        
+        hit_func is the function used to calculate hit.
+        Should return bool
+        dmg_func is the function used to calculate dmg
+        Should return int
+        
+        (Loosely coupled for testing, can pass in dummy hit/dmg calcs)
+        '''
+        if hit_func(target):
+            target.update_hp(-dmg_func(target))
+            
+    def melee_hit_check(self, target):
+        '''
+        Determine if a melee attack hits target
+        Currently a placeholder
+        '''
+        return True
+    
+    def melee_dmg(self, target):
+        '''
+        Determine melee damage
+        Currently a placeholder
+        '''
+        damage = 10
+        return damage
+        
+class Team(object):
+    '''
+    A group of Units controlled by a player or AI.
+    '''
+    def __init__(self):
+        self.all_units = []
+        self.live_units = []
+        self.dead_units = []
+        
+    def live_update(self):
+        for unit in self.all_units:
+            if unit.alive:
+                if unit not in self.live_units:
+                    self.live_units.append(unit)
+                if unit in self.dead_units:
+                    self.dead_units.remove(unit)
+            elif not unit.alive:
+                if unit in self.live_units:
+                    self.live_units.remove(unit)
+                if unit not in self.dead_units:
+                    self.dead_units.append(unit)
+        
+    def is_defeated(self):
+        '''
+        Flags true when all a team's units are dead.
+        '''
+        self.live_update()
+        if len(self.live_units)==0:
+            return True
+        else:
+            return False
+        
 
 class Battle(object):
     def __init__(self, grid):
+        self.teams = []
         self.units = []
         self.active_unit = False
         self.grid = grid
@@ -192,6 +290,73 @@ class Battle(object):
             return True
         else:
             return False
+        
+    def defeat_check(self):
+        for team in self.teams:
+            if team.is_defeated():
+                return True
+        return False
+    
+class Menu(object):
+    '''
+    Presents a menu and returns the choice
+    
+    Parameters: 
+    
+    options: A list. When complete, the menu will return the
+    selected element of the list.
+    
+    title: The title of the menu
+    '''
+    def __init__(self, options, title):
+        self.options = options
+        self.title = title
+        
+    def __str__(self):
+        '''
+        Creates a string presentation of the menu
+        '''
+        text_menu = [] 
+        text_menu.append("%s:\n" % self.title)
+        for number, item in zip(xrange(len(self.options)), self.options):
+            text_menu.append("%s: %s\n" % (number, item))
+        text_menu = "".join(text_menu)
+        return text_menu
+            
+    def prompt_for_input(self):
+        '''
+        Prompt user for selection from list
+        Just a wrapper for raw_input for testing purposes
+        '''
+        return(raw_input("Enter a number: "))
+        
+    def pull_from_menu(self, command, menu):
+        '''
+        Returns an item selected from a numerically indexed menu prompt
+        '''
+        try:
+            command = int(command)
+        except:
+            return(False)
+        if command in menu.keys():
+            result = menu[int(command)]
+            return(result)
+        else:
+            return(False)
+        
+    def get_move_command(self, input_func):
+        menu = self.make_move_menu()
+        self.print_menu(menu, "Possible moves")
+        finished = False
+        while not finished:
+            command = input_func()
+            dest = self.pull_from_menu(command, menu)
+            if dest:
+                self.move(dest)
+                finished = True
+            else:
+                print("Please select a number from the menu.")
+    
         
 class Visualizer(object):
     '''
