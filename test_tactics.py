@@ -49,6 +49,9 @@ class TestTurn(object):
         self.b = t.Battle(grid)
         self.b.units = [self.slow, self.fast]
         
+    def dummy_input_end_turn(self):
+        return("End Turn")
+        
     def test_tick(self):
         self.b.tick()
         eq_(self.slow.ct, self.slow.speed)
@@ -58,6 +61,23 @@ class TestTurn(object):
         self.b.advance()
         eq_(self.b.active_unit, self.fast)
         eq_(self.slow.ct, 20)
+        
+    def test_turn(self):
+        self.b.advance()
+        eq_(self.b.active_unit, self.fast)
+        eq_(self.b.active_unit.ct, 100)
+        self.b.active_unit.turn(self.dummy_input_end_turn)
+        eq_(self.fast.ct, 0)
+        
+    def test_next_turn(self):
+        self.b.next_turn(self.dummy_input_end_turn)
+        ok_(not self.b.active_unit)
+        eq_(self.fast.ct, 0)
+        eq_(self.slow.ct, 20)
+        self.b.next_turn(self.dummy_input_end_turn)
+        ok_(not self.b.active_unit)
+        eq_(self.fast.ct, 0)
+        eq_(self.slow.ct, 40)
 
 class TestMove(object):
     def setup(self):
@@ -71,41 +91,15 @@ class TestMove(object):
         m = self.u.legal_moves()
         eq_(len(m), 8)
         
-    def test_make_move_menu(self):
-        m = self.u.make_move_menu()
-        eq_(len(m), 8)
-        self.u.print_menu(m, "Test move menu")
+    def test_possible_actions(self):
+        self.u.moved = False
+        self.u.acted = False
+        m = self.u.possible_actions()
+        eq_(len(m), 3)
+        ok_("Move" in m)
+        ok_("End Turn" in m)
         
-    def test_pull_move(self):
-        m = self.u.make_move_menu()
-        dest = self.u.pull_from_menu("1", m)
-        ok_(isinstance(dest, t.Node))
-        dest = self.u.pull_from_menu("13", m)
-        ok_(not dest)
-        dest = self.u.pull_from_menu("purple", m)
-        ok_(not dest)
-
-    def test_get_move(self):
-        responses = ["67",
-                     "walrus",
-                     "1"]
-        def f(responses):
-            '''
-            A generator that steps through the supplied responses
-            '''
-            for response in responses:
-                yield response
-                
-        def g(generator):
-            '''
-            Returns a function that returns the next element of responses
-            
-            When swapped in for the usual input function, simulates the user
-            entering the responses in sequence.
-            '''
-            return(lambda:next(generator))
         
-        self.u.get_move_command(g(f(responses)))
         
 class TestHealth(object):
     def setup(self):
@@ -173,10 +167,42 @@ class TestMenu(object):
         options = ["Larry", "Moe", "Curly"]
         title = "Stooges"
         self.m = t.Menu(options, title)
+        self.responses = ["67",
+                     "walrus",
+                     "1"]
+        self.fail_count = 0
+        
+    def f(self, responses):
+        '''
+        A generator that steps through a list of responses
+        '''
+        for response in responses:
+            yield response
+            
+    def g(self, generator):
+        '''
+        Returns a function that returns the next element of the generator.
+
+        Swapped out for the normal input function, simulates entering the 
+        responses in sequence.
+        '''
+        return(lambda:next(generator))
+    
+    def fail_capture(self):
+        '''
+        Sub in for usual fail function to count number of failures
+        '''
+        self.fail_count += 1
         
     def test_string(self):
-        predicted_str = """Stooges:\n0: Larry\n1: Moe\n2: Curly\n"""
-        eq_(str(self.m), predicted_str) 
+        predicted_str = "Stooges:\n0: Larry\n1: Moe\n2: Curly\n"
+        eq_(str(self.m), predicted_str)
+        
+    def test_menu(self):
+        r = self.m.get_result(self.m.text_display, self.g(self.f(self.responses)), self.fail_capture)
+        #Should fail twice, then choose option indexed 1.
+        eq_(r, "Moe")
+        eq_(self.fail_count, 2)
         
 class TestVis(object):
     def setup(self):

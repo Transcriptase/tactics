@@ -79,6 +79,7 @@ class Unit(object):
         
         self.moved = False
         self.acted = False
+        
 
     def move(self, node):
         '''
@@ -103,69 +104,64 @@ class Unit(object):
         in_range = self.battle.grid.neighbors(self.location, self.move_speed)
         return(in_range)
     
-    def make_move_menu(self):
-        '''
-        Create and print an indexed list of possible moves
-        '''
-        move_menu = dict(zip(range(len(self.legal_moves())), self.legal_moves()))
-        return(move_menu)
+    def possible_actions(self):
+        options = []
+        if not self.moved:
+            options.append("Move")
+        if not self.acted:
+            options.append("Action")
+        always = ["End Turn"]
+        for item in always:
+            options.append(item)
+        return options
+
         
-    def print_menu(self, menu, title):
+    def get_move_command(self):
         '''
-        Prints a dictionary as a menu, preceded by title.
+        Creates a Menu of legal moves and returns the destination
         '''
-        print "%s :\n" % title
-        for number, item in menu.iteritems():
-            print "%s: %s" % (number, item)
-            
-    def prompt_for_input(self):
-        '''
-        Prompt user for selection from list
-        Just a wrapper for raw_input for testing purposes
-        '''
-        return(raw_input("Enter a number: "))
-        
-    def pull_from_menu(self, command, menu):
-        '''
-        Returns an item selected from a numerically indexed menu prompt
-        '''
-        try:
-            command = int(command)
-        except:
-            return(False)
-        if command in menu.keys():
-            result = menu[int(command)]
-            return(result)
-        else:
-            return(False)
-        
-    def get_move_command(self, input_func):
-        menu = self.make_move_menu()
-        self.print_menu(menu, "Possible moves")
-        finished = False
-        while not finished:
-            command = input_func()
-            dest = self.pull_from_menu(command, menu)
-            if dest:
-                self.move(dest)
-                finished = True
-            else:
-                print("Please select a number from the menu.")
+        options = self.legal_moves()
+        move_menu = Menu(options, "Legal Moves")
+        dest = move_menu.text_get_result()
+        return(dest)
     
-    def turn(self):
+    def turn(self, input_func):
         '''
         Run when a unit becomes active. Steps through turn sequence, then resets CT
+        
+        input_func = The function that returns the next action command
         '''
         #Reset moved and acted counters
         self.moved = False
         self.acted = False
+        self.turn_finished = False
         
-        #Set up loop
-        finished = False
-        while not finished:
-            print "%s's Turn:" % self.name
-            self.get_move_command(self.prompt_for_input)
+        #Set up loop    
+        while not self.turn_finished:
+            action = input_func()
+            self.action_parse(action)
         self.ct = 0
+        
+    def text_get_command(self):
+        title = "%s's Turn" % (self.name)
+        action_menu = Menu(self.possible_actions(), title)
+        return(action_menu.text_get_result())
+        
+    def action_parse(self, action):
+        if action == "Move":
+            self.execute_move_command()
+        elif action == "End Turn":
+            self.execute_end_turn_command()
+            
+    def execute_move_command(self):
+        move_menu = Menu(self.legal_moves(), "Move to")
+        dest = move_menu.text_get_result()
+        self.move(dest)
+        self.moved = True
+        
+    def execute_end_turn_command(self):
+        self.turn_finished = True
+
         
     def update_hp(self, amount):
         '''
@@ -255,6 +251,8 @@ class Battle(object):
         self.active_unit = False
         self.grid = grid
         
+        self.finished = False
+        
     def tick(self):
         '''
         Moves time forward by one tick
@@ -273,14 +271,26 @@ class Battle(object):
         
     def run(self, kill_func):
         '''
-        Main Battle loop. Proceeds until kill_func returns True
+        Main Battle loop.
+        
+        Parameters:
+        input_func: The function that returns the command
+        kill_func : A function that ends the loop when it returns True
         '''
-        finished = False
-        while not finished:
-            self.advance()
-            self.active_unit.turn()
-            self.active_unit = False
-            finished = kill_func()
+        self.finished = False
+        while not self.finished:
+            self.next_turn(self.active_unit.text_get_command)
+            self.finished = kill_func()
+            
+    def next_turn(self, input_func):
+        '''
+        Finds the next active unit, runs its turn, and resets
+        
+        input_func: The function that returns the command.
+        '''
+        self.advance()
+        self.active_unit.turn(input_func)
+        self.active_unit = False
             
     def manual_kill_check(self):
         '''
@@ -322,40 +332,71 @@ class Menu(object):
             text_menu.append("%s: %s\n" % (number, item))
         text_menu = "".join(text_menu)
         return text_menu
+    
+    def text_display(self):
+        '''
+        Simplest display function. Prints string representation of menu.
+        '''
+        print self
             
-    def prompt_for_input(self):
+    def text_prompt(self):
         '''
         Prompt user for selection from list
         Just a wrapper for raw_input for testing purposes
         '''
         return(raw_input("Enter a number: "))
         
-    def pull_from_menu(self, command, menu):
+    def pull(self, command):
         '''
-        Returns an item selected from a numerically indexed menu prompt
+        Attempts to resolve a command into a menu selection.
+        Returns the selection if successful, and False if not.
         '''
         try:
             command = int(command)
         except:
             return(False)
-        if command in menu.keys():
-            result = menu[int(command)]
+        if command in xrange(len(self.options)):
+            result = self.options[command]
             return(result)
         else:
             return(False)
         
-    def get_move_command(self, input_func):
-        menu = self.make_move_menu()
-        self.print_menu(menu, "Possible moves")
+    def text_fail(self):
+        print "Invalid input. Please select again."
+        
+    def get_result(self, 
+                   display_func,
+                   input_func,
+                   fail_func):
+        '''
+        Core menu loop. Displays the menu, gets input until a
+        usable result occurs, then returns the result.
+        
+        Parameters:
+        display_func: A function that displays the menu.
+        (Currently only self.text_display)
+        input_func: The function that prompts for user input.
+        (Currently only self.text_prompt)
+        fail_func: Function run if input is invalid
+        (Currently only self.text_fail)
+        '''
+        display_func()
         finished = False
         while not finished:
             command = input_func()
-            dest = self.pull_from_menu(command, menu)
-            if dest:
-                self.move(dest)
+            if self.pull(command):
                 finished = True
+                return self.pull(command)
             else:
-                print("Please select a number from the menu.")
+                fail_func()
+                
+    def text_get_result(self):
+        '''
+        Wrapper for get_result() with STDOUT text-based options
+        '''
+        return(self.get_result(self.text_display,
+                               self.text_prompt,
+                               self.text_fail))
     
         
 class Visualizer(object):
@@ -451,7 +492,6 @@ if __name__ == '__main__':
             new_unit.speed = speed
             new_unit.join_battle(b, x, y)
         
-        v = Visualizer(b)
-        v.run()
+            b.run(b.manual_kill_check, )
         
     main()
